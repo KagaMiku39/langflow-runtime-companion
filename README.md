@@ -1,50 +1,78 @@
 # Langflow Runtime Companion
 
-一个独立维护的 Langflow 本地部署、健康检查与运行链路说明仓库。它不复制 Langflow 主仓库，也不把上游功能声明为个人实现；这里保存的是本人编写的安全启动脚本、可复核验证脚本和架构说明。
+用于本地启动和检查 Langflow 的配套脚本，附安装步骤和运行流程说明。脚本统一配置监听地址、数据目录和数据库位置，方便重复使用和排查启动问题。
 
-> 本项目不是 Langflow 官方项目，也不代表参与 Langflow 核心开发。验证基线为 Langflow `v1.12.2`，commit `c979695ce660285b267b3e7c6788e91aade3c0fe`。完整来源和许可见 [`UPSTREAM.md`](UPSTREAM.md) 与 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
-
-## 为什么做
-
-直接运行 `langflow run` 可以看到界面，却不容易判断数据目录、数据库、监听地址和真实健康状态是否正确。本仓库把这些部署细节固定成可审查脚本，并把 FastAPI 入口、Flow 数据和 Graph Runtime 的职责拆开说明。
-
-## 怎么做
-
-- `scripts/start-langflow.sh` 将虚拟环境、数据目录、地址、端口和登录策略全部参数化。
-- 默认仅监听 `127.0.0.1`，并默认关闭自动登录；脚本会拒绝“公网监听 + 自动登录”的危险组合。
-- SQLite、配置和运行数据集中到独立目录，不污染官方源码 checkout。
-- `scripts/verify-langflow.sh` 检查 `/health_check` 与 `/openapi.json`，设置连接和总超时，并输出标题、版本与接口数量。
-- 文档记录 Langflow 的图工作流执行链，同时明确区分“图决定节点顺序”与“模型决定工具调用”。
-
-## 结果
-
-- 可在不修改官方仓库的前提下重复启动与验证 Langflow。
-- 健康检查使用官方实现中的综合检查入口，而不是容易被 Uvicorn 提前响应的 `/health`。
-- 所有脚本不包含本机用户名、绝对路径、API Key 或数据库密码。
+本仓库包含两份 Bash 脚本和相关文档。实际的界面、API 和工作流执行功能由安装的官方 Langflow 提供。
 
 ## 使用
 
-先按 [`docs/deployment.md`](docs/deployment.md) 安装与配置 Langflow，然后运行：
+在 Bash 环境中运行，例如 Linux、macOS 或 Windows 的 WSL。验证脚本还需要 `curl` 和 `python3`。
+
+先按 [部署说明](docs/deployment.md) 创建独立的 Python 环境并安装 Langflow，再启动：
 
 ```bash
 ./scripts/start-langflow.sh
 ```
 
-在另一个终端验证：
+默认配置：
+
+- 访问地址：`http://127.0.0.1:7860`
+- 虚拟环境：`$HOME/.venvs/langflow-runtime`
+- 数据目录：`$HOME/.local/share/langflow-runtime`
+- 数据库：数据目录下的 `langflow.db`
+- 自动登录关闭，使用一个 worker
+
+在另一个终端检查服务：
 
 ```bash
 ./scripts/verify-langflow.sh
 ```
 
-常用可选配置：
+验证脚本请求 `/health_check` 和 `/openapi.json`，检查 HTTP 请求是否成功，以及接口说明是否包含标题和路径。通过后输出标题、版本和 API 路径数。
+
+## 修改配置
+
+脚本从环境变量读取配置。需要更换目录或端口时，可以在启动前设置：
 
 ```bash
 export LANGFLOW_VENV_DIR="$HOME/.venvs/langflow-runtime"
 export LANGFLOW_DATA_DIR="$HOME/.local/share/langflow-runtime"
 export LANGFLOW_HOST="127.0.0.1"
 export LANGFLOW_PORT="7860"
+
+./scripts/start-langflow.sh
 ```
 
-## 内容边界
+验证其他地址，或指定预期版本：
 
-本仓库没有包含 Langflow 官方 Python/TypeScript 源码、前端资源或 Git 历史。需要阅读或贡献 Langflow 本身时，请使用官方仓库；需要展示个人工程能力时，可引用本仓库中的启动、验证、归属和架构梳理工作。
+```bash
+export LANGFLOW_BASE_URL="http://127.0.0.1:7860"
+export LANGFLOW_EXPECTED_VERSION="1.12.2"
+export LANGFLOW_CONNECT_TIMEOUT_SECONDS="5"
+export LANGFLOW_MAX_TIME_SECONDS="30"
+
+./scripts/verify-langflow.sh
+```
+
+本地使用保持监听 `127.0.0.1` 即可。需要远程访问时，请先按所用 Langflow 版本配置认证、TLS 和访问控制。真实模型密钥通过 Langflow 支持的配置方式或进程环境提供，不提交到仓库。
+
+## 文件说明
+
+| 文件 | 用途 |
+| --- | --- |
+| [scripts/start-langflow.sh](scripts/start-langflow.sh) | 检查启动配置、设置数据目录并运行 Langflow |
+| [scripts/verify-langflow.sh](scripts/verify-langflow.sh) | 检查服务健康状态和 OpenAPI 文档 |
+| [docs/deployment.md](docs/deployment.md) | 安装环境、启动服务和配置凭据 |
+| [docs/verification.md](docs/verification.md) | 验证方式、超时设置和健康检查入口 |
+| [docs/architecture.md](docs/architecture.md) | 说明 FastAPI、Flow 数据、图调度和 Agent 工具调用的关系 |
+| [UPSTREAM.md](UPSTREAM.md) | 记录参考版本及对应的官方源码位置 |
+
+## 参考版本与许可
+
+脚本和架构说明以官方 [Langflow](https://github.com/langflow-ai/langflow) `v1.12.2` 为基线，对应提交：
+
+`c979695ce660285b267b3e7c6788e91aade3c0fe`
+
+更换 Langflow 版本后，需要重新确认启动参数和健康检查接口。具体参考位置见 [UPSTREAM.md](UPSTREAM.md)。
+
+本仓库的配套脚本和文档采用 [MIT License](LICENSE)。Langflow 的来源、许可及归属说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [LICENSES/Langflow-MIT.txt](LICENSES/Langflow-MIT.txt)。
